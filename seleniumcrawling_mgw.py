@@ -30,7 +30,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import NoAlertPresentException
+from selenium.common.exceptions import NoAlertPresentException, NoSuchElementException
 
 HOST = "https://mgw.mariababy.com"
 
@@ -99,7 +99,22 @@ try:
     driver.get(post_link)
     time.sleep(2)
 
-    table_elem = driver.find_element(By.CLASS_NAME, "__se_tbl_ext")
+    # 1차: __se_tbl_ext 클래스 (스마트에디터로 작성된 게시글)
+    # 2차: 클래스 없는 평범한 <table> (엑셀 등에서 붙여넣은 게시글) — 메뉴 키워드 매칭으로 탐색
+    try:
+        table_elem = driver.find_element(By.CLASS_NAME, "__se_tbl_ext")
+    except NoSuchElementException:
+        kw = ["김치","된장","찌개","나물","국","밥","조림","볶음","탕","무침"]
+        candidates = driver.find_elements(By.TAG_NAME, "table")
+        best, best_score = None, 0
+        for t in candidates:
+            score = sum(1 for k in kw if k in (t.text or ""))
+            if score > best_score:
+                best, best_score = t, score
+        if not best or best_score < 3:
+            raise Exception(f"메뉴 테이블 탐색 실패 (max keyword score={best_score})")
+        print(f"메뉴 테이블 fallback 매칭: keyword score={best_score}")
+        table_elem = best
     table_html = table_elem.get_attribute("outerHTML")
 
     df = pd.read_html(StringIO(table_html), flavor="lxml")[0]
